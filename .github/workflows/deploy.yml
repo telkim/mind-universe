@@ -32,7 +32,7 @@ jobs:
       # (만약 보안을 위한 데이터 암호화 스크립트가 있다면 이 단계 직후에 실행하면 됩니다)
       - name: Parse Markdown & Build Project
         run: |
-          node parse-md.js
+          #node parse-md.js
           npm run build
 
       # 5. 빌드 결과물(dist 폴더)을 gh-pages 브랜치에 배포
