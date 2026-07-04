@@ -105,7 +105,8 @@ function App() {
 
   useEffect(() => {
     let alive = true;
-    fetch(`${import.meta.env.BASE_URL}/data.json`)
+    const jsonPath = `${import.meta.env.BASE_URL}/data.json`.replace(/\/+/g, '/');
+    fetch(jsonPath)
       .then((res) => {
         if (!res.ok) throw new Error("data.json fetch failed");
         return res.json();
