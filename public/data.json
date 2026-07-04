@@ -1,11 +1,47 @@
 [
   {
     "id": "1",
-    "title": "글제목",
-    "date": "2026-07-04",
+    "title": "중국 로봇 굴기의 진짜 병목은 소프트웨어다",
+    "date": "2026.05.30",
     "topic": "반도체",
-    "thesis": "HBM·메모리",
-    "body": "본문내용",
-    "link": "https://blog.naver.com/"
+    "thesis": "로봇과 자동화",
+    "body": "중국 로봇 가성비 밸류체인 침투와 제어 소프트웨어 알고리즘 병목 구간 분석",
+    "link": "https://blog.naver.com/mosobamboo/223456789012"
+  },
+  {
+    "id": "2",
+    "title": "트럼프 2기 관세 지도에서 읽는 공급망 재배치",
+    "date": "2026.04.15",
+    "topic": "반도체",
+    "thesis": "트럼프와 정책",
+    "body": "미국 무역대표부 관세 폭탄 시나리오와 멕시코 베트남 우회 수출 병목",
+    "link": "https://blog.naver.com/mosobamboo/223456789013"
+  },
+  {
+    "id": "3",
+    "title": "조선업 슈퍼사이클은 어디에서 끝나는가",
+    "date": "2026.03.22",
+    "topic": "기계·로봇·방산·조선·우주",
+    "thesis": "조선 슈퍼사이클",
+    "body": "HD현대중공업 삼성중공업 도크 잔량과 선박 교체 주기 엔진 병목",
+    "link": "https://blog.naver.com/mosobamboo/223456789014"
+  },
+  {
+    "id": "4",
+    "title": "AI 에이전트가 SaaS 가격표를 다시 쓴다",
+    "date": "2026.02.11",
+    "topic": "AI·SW",
+    "thesis": "AI 에이전트 경제",
+    "body": "API 호출 비용 단가 하락과 구독형 비즈니스 모델의 붕괴 및 역발상 기회",
+    "link": "https://blog.naver.com/mosobamboo/223456789015"
+  },
+  {
+    "id": "5",
+    "title": "시장 혁명의 주기를 읽는 법: HBM 옆을 보라",
+    "date": "2026.01.18",
+    "topic": "AI·SW",
+    "thesis": "HBM·메모리 슈퍼사이클",
+    "body": "엔비디아 블랙웰 출하와 TSMC CoWoS 패키징 공정 병목 구간 수혜주",
+    "link": "https://blog.naver.com/mosobamboo/223456789016"
   }
 ]

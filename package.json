@@ -1,16 +1,24 @@
 {
+
+  "name": "mind-universe",
+  "version": "1.0.0",
+  "homepage": "https://telkim.github.io/mind-universe",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "test": "npm run build"
+    "build": "vite build --base=/mind-universe/",
+    "test": "npm run build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
-    "vite": "^7.0.0",
-    "typescript": "^5.8.0",
+    "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "lucide-react": "^0.468.0"
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
 }

@@ -21,9 +21,9 @@ const TOPICS = [
   { id: "ai-sw", name: "AI·SW", color: "#5bd8cb" },
   { id: "ai-use", name: "AI활용", color: "#67e0aa" },
   { id: "macro", name: "매크로", color: "#c7e85a" },
-  { id: "machine-defense", name: "기계·방산", color: "#e7b65f" },
-  { id: "industry", name: "산업섹터", color: "#b790f0" },
-  { id: "crypto", name: "암호화폐", color: "#f28ba4" },
+  { id: "machine-defense", name: "암호화폐", color: "#e7b65f" },
+  { id: "industry", name: "로봇", color: "#b790f0" },
+  { id: "crypto", name: "금리", color: "#f28ba4" },
   { id: "real-estate", name: "부동산", color: "#54d2e0" },
 ];
 
@@ -105,7 +105,7 @@ function App() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/data.json")
+    fetch(`${import.meta.env.BASE_URL}/data.json`)
       .then((res) => {
         if (!res.ok) throw new Error("data.json fetch failed");
         return res.json();
@@ -204,9 +204,9 @@ function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen }
   return (
     <header className="header">
       <div className="topbar">
-        <div className="brand" aria-label="모소밤부 Universe">
+        <div className="brand" aria-label="N-MIND Universe">
           <span className="bamboo">╂</span>
-          <strong>모소밤부 <b>UNIVERSE</b></strong>
+          <strong>N-MIND <b>UNIVERSE</b></strong>
         </div>
         <label className="search">
           <Search size={24} />
@@ -516,7 +516,7 @@ function LevelModal({ articles, level, read, readCount, nextLevel, onClose }) {
 }
 
 function Footer({ total }) {
-  return <footer className="footer">모소밤부 · <b>{total.toLocaleString()}편</b> · © 모소밤부. 비상업적 — <u>저작권</u></footer>;
+  return <footer className="footer">총 <b>{total.toLocaleString()}편</b> · © N-MIND. 비상업적 —  <a href="https://minseok617.github.io/moso-universe" target="_new">Inspired by moso-universe</a> <u></u></footer>;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

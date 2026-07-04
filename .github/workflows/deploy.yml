@@ -1,12 +1,44 @@
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>모소밤부 Universe</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+name: Deploy Mind Universe
+
+on:
+  push:
+    branches:
+      - main # main 브랜치에 푸시되거나 마크다운이 업로드되면 작동합니다.
+
+permissions:
+  contents: write # gh-pages 브랜치에 빌드본을 쓸 수 있는 권한을 부여합니다.
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 소스코드 체크아웃
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # 2. Node.js 환경 세팅
+      - name: Setup Node.js
+        uses: actions/actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. 의존성 패키지 설치
+      - name: Install Dependencies
+        run: npm ci
+
+      # 4. 마크다운 변환 및 빌드 실행
+      # (만약 보안을 위한 데이터 암호화 스크립트가 있다면 이 단계 직후에 실행하면 됩니다)
+      - name: Parse Markdown & Build Project
+        run: |
+          node parse-md.js
+          npm run build
+
+      # 5. 빌드 결과물(dist 폴더)을 gh-pages 브랜치에 배포
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist # 빌드 결과물이 나오는 폴더명
+          branch: gh-pages # 배포용 브랜치 지정
+          clean: true
