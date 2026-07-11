@@ -18,7 +18,7 @@ a:hover { text-decoration: underline; color: #bff476; }
 
 /* 헤더 높이 및 구조 컴팩트 조정 */
 .header { position: fixed; inset: 0 0 auto 0; z-index: 20; border-bottom: 1px solid #23401e; background: rgba(5, 16, 8, .95); }
-.topbar { height: 48px; display: grid; grid-template-columns: auto minmax(200px, 380px) repeat(4, auto) auto; gap: 10px; align-items: center; padding: 0 14px; }
+.topbar { height: 48px; display: grid; grid-template-columns: auto minmax(200px, 380px) repeat(5, auto) auto; gap: 10px; align-items: center; padding: 0 14px; }
 .brand { display: flex; gap: 6px; align-items: center; white-space: nowrap; font-size: 13px; }
 .brand b, .count, h1 { color: #a9ef6a; }
 .bamboo { color: #a5e76d; font-weight: 900; font-size: 16px; }
@@ -31,6 +31,7 @@ a:hover { text-decoration: underline; color: #bff476; }
 
 /* 상단 버튼류 70% 스케일 다운 */
 .pill, .blog { height: 28px; border: 1px solid #284a20; border-radius: 14px; padding: 0 10px; background: #11230d; color: #b4f36f; font-weight: 800; font-size: 12px; }
+.pill:disabled { opacity: .45; cursor: not-allowed; }
 .iconPill { display: inline-flex; align-items: center; gap: 5px; }
 .iconPill svg { width: 13px; height: 13px; }
 .blog { background: #a7e96a; color: #061109; font-size: 12px; }
@@ -76,6 +77,8 @@ a:hover { text-decoration: underline; color: #bff476; }
 .article { min-height: 48px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; border-bottom: 1px solid rgba(61, 91, 48, .25); padding: 6px 0; cursor: pointer; }
 .article.read { opacity: .55; }
 .article h2 { margin: 0 0 4px; font-size: 12.5px; line-height: 1.35; color: #f2f8e8; font-weight: 600; }
+.matchIcon { display: inline-block; width: 18px; color: #a9ef6a; }
+.articleExcerpt { margin: 0 0 4px; color: #aebfa5; font-size: 11px; line-height: 1.35; }
 .article time { color: #9eb391; font-size: 11px; }
 
 /* 액션 버튼 축소 및 하이라이트 인레이 보정 */

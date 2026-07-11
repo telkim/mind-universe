@@ -17,22 +17,62 @@ import {
 import "./styles.css";
 
 const TOPICS = [
-  { id: "semiconductor", name: "반도체", color: "#a8e25b" },
-  { id: "ai-sw", name: "AI·SW", color: "#5bd8cb" },
-  { id: "ai-use", name: "AI활용", color: "#67e0aa" },
-  { id: "macro", name: "매크로", color: "#c7e85a" },
-  { id: "machine-defense", name: "암호화폐", color: "#e7b65f" },
-  { id: "industry", name: "로봇", color: "#b790f0" },
-  { id: "crypto", name: "금리", color: "#f28ba4" },
-  { id: "real-estate", name: "부동산", color: "#54d2e0" },
+  { id: "business", name: "사업", color: "#a8e25b" },
+  { id: "career", name: "직업", color: "#5bd8cb" },
+  { id: "life", name: "생활", color: "#67e0aa" },
+  { id: "industry", name: "산업", color: "#c7e85a" },
+  { id: "corporate", name: "기업", color: "#e7b65f" },
+  { id: "real-estate", name: "부동산", color: "#b790f0" },
+  { id: "philosophy", name: "철학", color: "#f28ba4" },
+  { id: "society", name: "사회문화", color: "#54d2e0" },
 ];
 
-function getTopicCount(articles, topicName) {
-  return articles.filter((article) => article.topic === topicName).length;
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function assetPath(path) {
+  return `${BASE_URL}/${path}`.replace(/\/+/g, "/");
 }
 
-function getTopicMeta(topicName) {
-  return TOPICS.find((topic) => topic.name === topicName) || TOPICS[0];
+function normalizeSummaryPost(raw) {
+  if (Array.isArray(raw)) {
+    return {
+      postId: String(raw[0] || ""),
+      date: String(raw[1] || ""),
+      theses: String(raw[2] || ""),
+      title: String(raw[3] || ""),
+      summary: String(raw[4] || ""),
+      link: raw[5] ? String(raw[5]) : "",
+    };
+  }
+  return {
+    postId: String(raw?.postId || raw?.id || ""),
+    date: String(raw?.date || ""),
+    theses: String(raw?.theses || raw?.topic || raw?.thesis || ""),
+    title: String(raw?.title || ""),
+    summary: String(raw?.summary || raw?.body || ""),
+    link: String(raw?.link || ""),
+  };
+}
+
+function normalizeFullTextPost(raw) {
+  if (Array.isArray(raw)) {
+    return {
+      postId: String(raw[0] || ""),
+      body: String(raw[1] || ""),
+    };
+  }
+  return {
+    postId: String(raw?.postId || raw?.id || ""),
+    body: String(raw?.body || ""),
+  };
+}
+
+function getTopicCount(posts, topicName) {
+  return posts.filter((post) => post.theses.includes(topicName)).length;
+}
+
+function getTopicMeta(theses) {
+  return TOPICS.find((topic) => theses?.includes(topic.name)) || TOPICS[0];
 }
 
 function normalizeActivity(value) {
@@ -60,18 +100,18 @@ function useUserActivity() {
     });
   };
 
-  const toggle = (bucket, id) => {
+  const toggle = (bucket, postId) => {
     updateActivity((prev) => {
       const set = new Set(prev[bucket]);
-      set.has(id) ? set.delete(id) : set.add(id);
+      set.has(postId) ? set.delete(postId) : set.add(postId);
       return { ...prev, [bucket]: [...set] };
     });
   };
 
-  const markRead = (id) => {
+  const markRead = (postId) => {
     updateActivity((prev) => {
       const set = new Set(prev.read);
-      set.add(id);
+      set.add(postId);
       return { ...prev, read: [...set] };
     });
   };
@@ -80,63 +120,186 @@ function useUserActivity() {
     read: new Set(activity.read),
     later: new Set(activity.later),
     scraps: new Set(activity.scraps),
-    toggleLater: (id) => toggle("later", id),
-    toggleScrap: (id) => toggle("scraps", id),
+    toggleLater: (postId) => toggle("later", postId),
+    toggleScrap: (postId) => toggle("scraps", postId),
     markRead,
   };
 }
 
-function matchesSearch(article, search) {
-  const terms = search.trim().split(/\s+/).filter(Boolean);
-  if (!terms.length) return false;
-  const haystack = `${article.title || ""} ${article.body || ""}`.toLowerCase();
-  return terms.some((term) => haystack.includes(term.toLowerCase()));
+function getTerms(query) {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function includesAny(value, terms) {
+  const lower = String(value || "").toLowerCase();
+  return terms.some((term) => lower.includes(term));
+}
+
+function tokenize(value) {
+  return String(value || "").toLowerCase().split(/[\s·/.,!?()[\]{}"'“”‘’:_-]+/).filter(Boolean);
+}
+
+function getSummaryMatch(post, terms, phrase) {
+  const title = post.title.toLowerCase();
+  const summary = post.summary.toLowerCase();
+  const theses = post.theses.toLowerCase();
+  const titleTokens = tokenize(post.title);
+
+  if (phrase && title.includes(phrase)) return { rank: 1, matchType: "title", icon: "🏷️" };
+  if (terms.some((term) => titleTokens.some((token) => token.includes(term) || term.includes(token)))) return { rank: 2, matchType: "title", icon: "🏷️" };
+  if ((phrase && summary.includes(phrase)) || terms.some((term) => summary.includes(term))) return { rank: 3, matchType: "summary", icon: "📝" };
+  if ((phrase && theses.includes(phrase)) || terms.some((term) => theses.includes(term))) return { rank: 4, matchType: "category", icon: "🧭" };
+
+  return null;
+}
+
+function searchSummaries(posts, query) {
+  const terms = getTerms(query);
+  const phrase = query.trim().toLowerCase();
+  if (!terms.length) return [];
+
+  return posts
+    .map((post) => {
+      const match = getSummaryMatch(post, terms, phrase);
+      return match ? { ...post, ...match, excerpt: post.summary } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.rank - b.rank || String(b.date).localeCompare(String(a.date)));
+}
+
+function makeExcerpt(body, terms) {
+  const text = String(body || "").replace(/\s+/g, " ").trim();
+  const lower = text.toLowerCase();
+  const firstIndex = terms.reduce((best, term) => {
+    const index = lower.indexOf(term);
+    if (index < 0) return best;
+    return best < 0 ? index : Math.min(best, index);
+  }, -1);
+  if (firstIndex < 0) return text.slice(0, 180);
+  const start = Math.max(0, firstIndex - 70);
+  const end = Math.min(text.length, firstIndex + 130);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+}
+
+function searchFullText(fullTextPosts, summaryById, query, defaultResults) {
+  const terms = getTerms(query);
+  const existing = new Set(defaultResults.map((post) => post.postId));
+  if (!terms.length) return [];
+
+  return fullTextPosts
+    .map((post, index) => {
+      if (!includesAny(post.body, terms)) return null;
+      const summary = summaryById.get(post.postId);
+      if (!summary || existing.has(post.postId)) return null;
+      return {
+        ...summary,
+        rank: 5,
+        matchType: "body",
+        icon: "📄",
+        excerpt: makeExcerpt(post.body, terms),
+        bodyOrder: index,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.bodyOrder - b.bodyOrder);
 }
 
 function App() {
-  const [articles, setArticles] = useState([]);
+  const [posts, setPosts] = useState([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [panelMode, setPanelMode] = useState(null);
   const [readMode, setReadMode] = useState("browse");
   const [levelOpen, setLevelOpen] = useState(false);
+  const [fullTextPosts, setFullTextPosts] = useState([]);
+  const [fullTextLoaded, setFullTextLoaded] = useState(false);
+  const [fullTextLoading, setFullTextLoading] = useState(false);
+  const [fullTextQuery, setFullTextQuery] = useState("");
   const programmedQueryRef = useRef(false);
   const { read, later, scraps, toggleLater, toggleScrap, markRead } = useUserActivity();
 
   useEffect(() => {
     let alive = true;
-    const jsonPath = `${import.meta.env.BASE_URL}/data.json`.replace(/\/+/g, '/');
-    fetch(jsonPath)
+    fetch(assetPath("search-summary.json"))
       .then((res) => {
-        if (!res.ok) throw new Error("data.json fetch failed");
+        if (!res.ok) throw new Error("search-summary.json fetch failed");
         return res.json();
       })
       .then((data) => {
-        if (alive) setArticles(Array.isArray(data) ? data : []);
+        if (alive) setPosts((data.posts || []).map(normalizeSummaryPost).filter((post) => post.postId));
       })
       .catch(() => {
-        if (alive) setArticles([]);
+        if (alive) setPosts([]);
       });
     return () => {
       alive = false;
     };
   }, []);
 
+  useEffect(() => {
+    setFullTextQuery("");
+  }, [query]);
+
   const theses = useMemo(() => {
-    return [...new Set(articles.map((article) => article.thesis).filter(Boolean))];
-  }, [articles]);
+    return [...new Set(posts.map((post) => post.theses).filter(Boolean))];
+  }, [posts]);
+
+  const summaryById = useMemo(() => {
+    return new Map(posts.map((post) => [post.postId, post]));
+  }, [posts]);
+
+  const defaultResults = useMemo(() => {
+    if (panelMode === "later") return posts.filter((post) => later.has(post.postId)).map((post) => ({ ...post, icon: "⏰", matchType: "saved", excerpt: post.summary }));
+    if (panelMode === "scrap") return posts.filter((post) => scraps.has(post.postId)).map((post) => ({ ...post, icon: "🔖", matchType: "saved", excerpt: post.summary }));
+    if (selected) return searchSummaries(posts, selected.name);
+    if (query.trim()) return searchSummaries(posts, query);
+    return [];
+  }, [posts, query, selected, panelMode, later, scraps]);
+
+  const bodyResults = useMemo(() => {
+    if (!fullTextQuery || panelMode !== "search") return [];
+    return searchFullText(fullTextPosts, summaryById, fullTextQuery, defaultResults);
+  }, [fullTextPosts, summaryById, fullTextQuery, defaultResults, panelMode]);
 
   const filtered = useMemo(() => {
-    if (panelMode === "later") return articles.filter((article) => later.has(article.id));
-    if (panelMode === "scrap") return articles.filter((article) => scraps.has(article.id));
-    if (selected) return articles.filter((article) => article.topic === selected.name || article.thesis === selected.name);
-    if (query.trim()) return articles.filter((article) => matchesSearch(article, query));
-    return [];
-  }, [articles, query, selected, panelMode, later, scraps]);
+    return [...defaultResults, ...bodyResults];
+  }, [defaultResults, bodyResults]);
 
   const readCount = read.size;
   const level = Math.floor(readCount / 10) + 1;
   const nextLevel = level * 10;
+
+  const runFullTextSearch = async () => {
+    const term = query.trim();
+    if (!term || fullTextLoading) return;
+    setPanelMode("search");
+    setFullTextLoading(true);
+    try {
+      let loadedPosts = fullTextPosts;
+      if (!fullTextLoaded) {
+        const manifestRes = await fetch(assetPath("ft-manifest.json"));
+        if (!manifestRes.ok) throw new Error("ft-manifest.json fetch failed");
+        const manifest = await manifestRes.json();
+        const files = Array.isArray(manifest.files) ? manifest.files : [];
+        const chunks = await Promise.all(
+          files.map((file) =>
+            fetch(assetPath(file))
+              .then((res) => {
+                if (!res.ok) throw new Error(`${file} fetch failed`);
+                return res.json();
+              })
+              .then((data) => (data.posts || []).map(normalizeFullTextPost).filter((post) => post.postId))
+          )
+        );
+        loadedPosts = chunks.flat();
+        setFullTextPosts(loadedPosts);
+        setFullTextLoaded(true);
+      }
+      setFullTextQuery(term);
+    } finally {
+      setFullTextLoading(false);
+    }
+  };
 
   const openTopic = (topic) => {
     programmedQueryRef.current = true;
@@ -148,7 +311,7 @@ function App() {
   const openThesis = (name) => {
     programmedQueryRef.current = true;
     setQuery(name);
-    setSelected({ type: "thesis", name, subtitle: "산업·섹터별 분석 · 세부 테제" });
+    setSelected({ type: "thesis", name, subtitle: "카테고리" });
     setPanelMode("search");
   };
 
@@ -172,15 +335,17 @@ function App() {
 
   return (
     <main className="app">
-      <Header query={query} setQuery={setQuery} openTopic={openTopic} openArchive={openArchive} level={level} setLevelOpen={setLevelOpen} />
+      <Header query={query} setQuery={setQuery} openTopic={openTopic} openArchive={openArchive} level={level} setLevelOpen={setLevelOpen} runFullTextSearch={runFullTextSearch} fullTextLoading={fullTextLoading} />
       <section className="workspace">
-        <GraphCanvas articles={articles} theses={theses} selected={selected} panelOpen={Boolean(panelMode)} onTopic={openTopic} onThesis={openThesis} onDismiss={() => setPanelMode(null)} />
+        <GraphCanvas posts={posts} theses={theses} selected={selected} panelOpen={Boolean(panelMode)} onTopic={openTopic} onThesis={openThesis} onDismiss={() => setPanelMode(null)} />
         {panelMode && (
           <ListPanel
             mode={panelMode}
             selected={selected}
             query={query}
-            articles={filtered}
+            posts={filtered}
+            defaultCount={defaultResults.length}
+            bodyCount={bodyResults.length}
             theses={theses}
             later={later}
             scraps={scraps}
@@ -195,13 +360,13 @@ function App() {
           />
         )}
       </section>
-      <Footer total={articles.length} />
-      {levelOpen && <LevelModal articles={articles} level={level} read={read} readCount={readCount} nextLevel={nextLevel} onClose={() => setLevelOpen(false)} />}
+      <Footer total={posts.length} />
+      {levelOpen && <LevelModal posts={posts} level={level} read={read} readCount={readCount} nextLevel={nextLevel} onClose={() => setLevelOpen(false)} />}
     </main>
   );
 }
 
-function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen }) {
+function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen, runFullTextSearch, fullTextLoading }) {
   return (
     <header className="header">
       <div className="topbar">
@@ -211,8 +376,9 @@ function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen }
         </div>
         <label className="search">
           <Search size={24} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="제목·내용으로 글 검색" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="제목·요약·카테고리 검색" />
         </label>
+        <button className="pill iconPill" onClick={runFullTextSearch} disabled={!query.trim() || fullTextLoading}><Search />{fullTextLoading ? "검색중" : "본문 검색"}</button>
         <button className="pill iconPill" onClick={() => setLevelOpen(true)}><Sprout />레벨 {level}</button>
         <button className="pill iconPill" onClick={() => openArchive("later")}><Archive />보관함</button>
         <button className="pill iconPill"><Flame />추천글</button>
@@ -230,7 +396,7 @@ function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen }
   );
 }
 
-function GraphCanvas({ articles, theses, selected, panelOpen, onTopic, onThesis, onDismiss }) {
+function GraphCanvas({ posts, theses, selected, panelOpen, onTopic, onThesis, onDismiss }) {
   const canvasRef = useRef(null);
   const graphRef = useRef({ scale: 1, offsetX: 0, offsetY: 0, locked: false, nodes: [] });
 
@@ -250,18 +416,18 @@ function GraphCanvas({ articles, theses, selected, panelOpen, onTopic, onThesis,
     window.addEventListener("resize", resize);
 
     const topicNodes = TOPICS.map((topic, index) => {
-      const count = getTopicCount(articles, topic.name);
+      const count = getTopicCount(posts, topic.name);
       return { ...topic, count, kind: "topic", r: 15 + Math.min(10, count / 12), a: (Math.PI * 2 * index) / TOPICS.length, d: 98 + (index % 3) * 25 };
     });
 
     const thesisNodes = theses.slice(0, 24).map((name, index) => {
-      const topic = getTopicMeta(articles.find((article) => article.thesis === name)?.topic);
-      return { id: `thesis-${index}`, name, kind: "thesis", color: topic.color, r: 6 + (index % 3), a: (Math.PI * 2 * index) / Math.max(1, theses.length) + 0.3, d: 165 + (index % 5) * 15 };
+      const topic = getTopicMeta(name);
+      return { id: `thesis-${index}`, name, count: posts.filter((post) => post.theses === name).length, kind: "thesis", color: topic.color, r: 6 + (index % 3), a: (Math.PI * 2 * index) / Math.max(1, theses.length) + 0.3, d: 165 + (index % 5) * 15 };
     });
 
-    const smallNodes = articles.slice(0, 52).map((article, index) => {
-      const topic = getTopicMeta(article.topic);
-      return { id: `small-${article.id}`, name: "", kind: "small", color: topic.color, r: 2 + (index % 4), a: (Math.PI * 2 * index) / 52, d: 231 + (index % 8) * 13 };
+    const smallNodes = posts.slice(0, 52).map((post, index) => {
+      const topic = getTopicMeta(post.theses);
+      return { id: `small-${post.postId}`, name: "", kind: "small", color: topic.color, r: 2 + (index % 4), a: (Math.PI * 2 * index) / 52, d: 231 + (index % 8) * 13 };
     });
 
     const nodes = [...topicNodes, ...thesisNodes, ...smallNodes];
@@ -312,7 +478,7 @@ function GraphCanvas({ articles, theses, selected, panelOpen, onTopic, onThesis,
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
-  }, [articles, theses, selected, panelOpen]);
+  }, [posts, theses, selected, panelOpen]);
 
   const hitTest = (event) => {
     const canvas = canvasRef.current;
@@ -398,12 +564,18 @@ function drawNode(ctx, node, selected) {
   }
 }
 
+function getPostLink(post) {
+  return post.link || `https://blog.naver.com/bambooinvesting/${encodeURIComponent(post.postId)}`;
+}
+
 function ListPanel(props) {
   const {
     mode,
     selected,
     query,
-    articles,
+    posts,
+    defaultCount,
+    bodyCount,
     theses,
     later,
     scraps,
@@ -419,9 +591,9 @@ function ListPanel(props) {
   const title = mode === "later" ? "나중에 읽기" : mode === "scrap" ? "스크랩" : selected?.name || query;
   const subtitle = mode === "search" ? selected?.subtitle || "검색 결과" : "보관함";
 
-  const openArticle = (article) => {
-    if (article.link) window.open(article.link, "_blank", "noopener,noreferrer");
-    markRead(article.id);
+  const openPost = (post) => {
+    window.open(getPostLink(post), "_blank", "noopener,noreferrer");
+    markRead(post.postId);
   };
 
   return (
@@ -429,7 +601,7 @@ function ListPanel(props) {
       <button className="close" onClick={onClose}><X /></button>
       <p className="subtitle">{subtitle}</p>
       <h1>{title}</h1>
-      {mode === "search" ? <strong className="count">{articles.length}편이 제목과 일치합니다</strong> : <strong className="count">나중에 읽기 {later.size}건 · 스크랩 {scraps.size}건</strong>}
+      {mode === "search" ? <strong className="count">{defaultCount}편이 제목·요약·카테고리와 일치합니다{bodyCount ? ` · 본문 ${bodyCount}편` : ""}</strong> : <strong className="count">나중에 읽기 {later.size}건 · 스크랩 {scraps.size}건</strong>}
       <div className="panelTools">
         <span>글 열</span>
         <button className={mode === "later" ? "activeTool" : ""} onClick={() => openArchive("later")}>⏰ 나중에 읽기</button>
@@ -448,28 +620,29 @@ function ListPanel(props) {
           </div>
         )}
         <div className="articleList">
-          {articles.map((article) => (
-            <article key={article.id} className={read.has(article.id) ? "read article" : "article"} onClick={() => openArticle(article)}>
+          {posts.map((post) => (
+            <article key={`${post.matchType}-${post.postId}`} className={read.has(post.postId) ? "read article" : "article"} onClick={() => openPost(post)}>
               <div>
-                <h2>{article.title}</h2>
-                <time>{article.date}</time>
+                <h2><span className="matchIcon">{post.icon}</span>{post.title}</h2>
+                <p className="articleExcerpt">{post.excerpt}</p>
+                <time>{post.date} · {post.theses}</time>
               </div>
               <div className="articleActions">
                 <button
-                  className={later.has(article.id) ? "saved ring-1 ring-amber-400 bg-emerald-950/40" : ""}
+                  className={later.has(post.postId) ? "saved ring-1 ring-amber-400 bg-emerald-950/40" : ""}
                   onClick={(event) => {
                     event.stopPropagation();
-                    toggleLater(article.id);
+                    toggleLater(post.postId);
                   }}
                   title="나중에 읽기"
                 >
                   ⏰
                 </button>
                 <button
-                  className={scraps.has(article.id) ? "saved ring-1 ring-amber-400 bg-emerald-950/40" : ""}
+                  className={scraps.has(post.postId) ? "saved ring-1 ring-amber-400 bg-emerald-950/40" : ""}
                   onClick={(event) => {
                     event.stopPropagation();
-                    toggleScrap(article.id);
+                    toggleScrap(post.postId);
                   }}
                   title="스크랩"
                 >
@@ -478,14 +651,14 @@ function ListPanel(props) {
               </div>
             </article>
           ))}
-          {!articles.length && <p className="empty">아직 저장된 글이 없어요.</p>}
+          {!posts.length && <p className="empty">검색 결과가 없어요.</p>}
         </div>
       </div>
     </aside>
   );
 }
 
-function LevelModal({ articles, level, read, readCount, nextLevel, onClose }) {
+function LevelModal({ posts, level, read, readCount, nextLevel, onClose }) {
   return (
     <div className="modalBackdrop" onClick={onClose}>
       <section className="levelModal" onClick={(event) => event.stopPropagation()}>
@@ -497,7 +670,7 @@ function LevelModal({ articles, level, read, readCount, nextLevel, onClose }) {
             <p>{readCount ? "읽은 글이 차곡차곡 쌓이고 있어요" : "아직 읽은 글이 없어요 — 글을 눌러 탐험을 시작하세요"}</p>
           </div>
         </div>
-        <p className="progressText">전체 진행도 <b>{readCount}</b> / {articles.length}편 ({articles.length ? Math.round((readCount / articles.length) * 100) : 0}%) · 다음 레벨까지 {Math.max(0, nextLevel - readCount)}편</p>
+        <p className="progressText">전체 진행도 <b>{readCount}</b> / {posts.length}편 ({posts.length ? Math.round((readCount / posts.length) * 100) : 0}%) · 다음 레벨까지 {Math.max(0, nextLevel - readCount)}편</p>
         <div className="bar"><span style={{ width: `${Math.min(100, (readCount % 10) * 10)}%` }} /></div>
         <div className="levelBody">
           <div className="radar">
@@ -505,9 +678,9 @@ function LevelModal({ articles, level, read, readCount, nextLevel, onClose }) {
           </div>
           <div className="topicProgress">
             {TOPICS.map((topic) => {
-              const topicArticles = articles.filter((article) => article.topic === topic.name);
-              const topicRead = topicArticles.filter((article) => read.has(article.id)).length;
-              return <label key={topic.id}>{topic.name}<b>{topicRead}/{topicArticles.length}</b><i><span style={{ width: `${topicArticles.length ? (topicRead / topicArticles.length) * 100 : 0}%` }} /></i></label>;
+              const topicPosts = posts.filter((post) => post.theses.includes(topic.name));
+              const topicRead = topicPosts.filter((post) => read.has(post.postId)).length;
+              return <label key={topic.id}>{topic.name}<b>{topicRead}/{topicPosts.length}</b><i><span style={{ width: `${topicPosts.length ? (topicRead / topicPosts.length) * 100 : 0}%` }} /></i></label>;
             })}
           </div>
         </div>
@@ -517,7 +690,7 @@ function LevelModal({ articles, level, read, readCount, nextLevel, onClose }) {
 }
 
 function Footer({ total }) {
-  return <footer className="footer">총 <b>{total.toLocaleString()}편</b> · © N-MIND. 비상업적 —  <a href="https://minseok617.github.io/moso-universe" target="_new">Inspired by moso-universe</a> <u></u></footer>;
+  return <footer className="footer">총 <b>{total.toLocaleString()}편</b> · © N-MIND. 비상업적 — <a href="https://minseok617.github.io/moso-universe" target="_new">Inspired by moso-universe</a></footer>;
 }
 
 createRoot(document.getElementById("root")).render(<App />);
