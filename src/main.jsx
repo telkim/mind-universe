@@ -16,16 +16,15 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const TOPICS = [
-  { id: "business", name: "사업", color: "#a8e25b" },
-  { id: "career", name: "직업", color: "#5bd8cb" },
-  { id: "life", name: "생활", color: "#67e0aa" },
-  { id: "industry", name: "산업", color: "#c7e85a" },
-  { id: "corporate", name: "기업", color: "#e7b65f" },
-  { id: "real-estate", name: "부동산", color: "#b790f0" },
-  { id: "philosophy", name: "철학", color: "#f28ba4" },
-  { id: "society", name: "사회문화", color: "#54d2e0" },
+const MAIN_THEMES = [
+  "사업", "직업", "생활", "국제정세", "사회문화", "철학", "부동산", "투자"
 ];
+
+const CATEGORY_ALIAS = {
+  "투자단상": ["투자", "투자 철학·단상"],
+  "사업/삶": ["사업", "사업·삶·커리어"],
+  "매크로": ["국제정세", "매크로·국제정세"]
+};
 
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -65,14 +64,6 @@ function normalizeFullTextPost(raw) {
     postId: String(raw?.postId || raw?.id || ""),
     body: String(raw?.body || ""),
   };
-}
-
-function getTopicCount(posts, topicName) {
-  return posts.filter((post) => post.theses.includes(topicName)).length;
-}
-
-function getTopicMeta(theses) {
-  return TOPICS.find((topic) => theses?.includes(topic.name)) || TOPICS[0];
 }
 
 function normalizeActivity(value) {
@@ -215,8 +206,12 @@ function App() {
   const [fullTextLoaded, setFullTextLoaded] = useState(false);
   const [fullTextLoading, setFullTextLoading] = useState(false);
   const [fullTextQuery, setFullTextQuery] = useState("");
+  const [focusNode, setFocusNode] = useState(null);
   const programmedQueryRef = useRef(false);
   const { read, later, scraps, toggleLater, toggleScrap, markRead } = useUserActivity();
+  const readCount = read.size;
+  const level = Math.floor(readCount / 10) + 1;
+  const nextLevel = level * 10;
 
   useEffect(() => {
     let alive = true;
@@ -240,8 +235,77 @@ function App() {
     setFullTextQuery("");
   }, [query]);
 
-  const theses = useMemo(() => {
-    return [...new Set(posts.map((post) => post.theses).filter(Boolean))];
+  useEffect(() => {
+    if (focusNode) {
+      setSelected(null);
+      setPanelMode(null);
+    }
+  }, [focusNode]);
+
+  const dynamicNodes = useMemo(() => {
+    const themeNodes = MAIN_THEMES.reduce((acc, theme) => {
+      acc[theme] = { name: theme, kind: "theme", posts: [], subTheses: new Map() };
+      return acc;
+    }, {});
+
+    posts.forEach((post) => {
+      const tags = post.theses.split("/").filter(Boolean);
+      tags.forEach((tag) => {
+        let theme = MAIN_THEMES.find(t => tag.includes(t)) || "기타";
+        let subThesis = tag;
+
+        for (const [key, [aliasedTheme, aliasedThesis]] of Object.entries(CATEGORY_ALIAS)) {
+          if (tag.includes(key)) {
+            theme = aliasedTheme;
+            subThesis = aliasedThesis;
+            break;
+          }
+        }
+
+        if (!themeNodes[theme]) themeNodes[theme] = { name: theme, kind: "theme", posts: [], subTheses: new Map() };
+        themeNodes[theme].posts.push(post);
+
+        if (!themeNodes[theme].subTheses.has(subThesis)) {
+          themeNodes[theme].subTheses.set(subThesis, []);
+        }
+        themeNodes[theme].subTheses.get(subThesis).push(post);
+      });
+    });
+
+    const nodes = [];
+    const mainThemeKeys = Object.keys(themeNodes);
+    mainThemeKeys.forEach((themeName, i) => {
+      const theme = themeNodes[themeName];
+      const themeAngle = (Math.PI * 2 * i) / mainThemeKeys.length;
+      const themeNode = { 
+        ...theme, 
+        id: `theme-${i}`, 
+        count: theme.posts.length, 
+        kind: "theme", 
+        color: "#67e0aa", 
+        r: 25, 
+        a: themeAngle, 
+        d: 120 
+      };
+      nodes.push(themeNode);
+
+      const subThesesArray = Array.from(theme.subTheses.entries());
+      subThesesArray.forEach(([name, posts], j) => {
+        const subAngle = themeAngle + (Math.PI * 0.4 * (j / subThesesArray.length - 0.5));
+        nodes.push({ 
+          name, 
+          posts, 
+          id: `thesis-${i}-${j}`, 
+          count: posts.length, 
+          kind: "thesis", 
+          color: "#a8e25b", 
+          r: 10 + Math.min(10, posts.length), 
+          a: subAngle, 
+          d: 220 
+        });
+      });
+    });
+    return nodes;
   }, [posts]);
 
   const summaryById = useMemo(() => {
@@ -251,7 +315,7 @@ function App() {
   const defaultResults = useMemo(() => {
     if (panelMode === "later") return posts.filter((post) => later.has(post.postId)).map((post) => ({ ...post, icon: "⏰", matchType: "saved", excerpt: post.summary }));
     if (panelMode === "scrap") return posts.filter((post) => scraps.has(post.postId)).map((post) => ({ ...post, icon: "🔖", matchType: "saved", excerpt: post.summary }));
-    if (selected) return searchSummaries(posts, selected.name);
+    if (selected) return selected.posts || [];
     if (query.trim()) return searchSummaries(posts, query);
     return [];
   }, [posts, query, selected, panelMode, later, scraps]);
@@ -264,10 +328,6 @@ function App() {
   const filtered = useMemo(() => {
     return [...defaultResults, ...bodyResults];
   }, [defaultResults, bodyResults]);
-
-  const readCount = read.size;
-  const level = Math.floor(readCount / 10) + 1;
-  const nextLevel = level * 10;
 
   const runFullTextSearch = async () => {
     const term = query.trim();
@@ -301,17 +361,14 @@ function App() {
     }
   };
 
-  const openTopic = (topic) => {
-    programmedQueryRef.current = true;
-    setQuery(topic.name);
-    setSelected({ type: "topic", name: topic.name, subtitle: "대주제" });
-    setPanelMode("search");
+  const handleThemeClick = (themeName) => {
+    const node = dynamicNodes.find(n => n.name === themeName && n.kind === "theme");
+    if(node) setFocusNode(node);
   };
 
-  const openThesis = (name) => {
-    programmedQueryRef.current = true;
-    setQuery(name);
-    setSelected({ type: "thesis", name, subtitle: "카테고리" });
+  const openThesis = (node) => {
+    setFocusNode(null);
+    setSelected(node);
     setPanelMode("search");
   };
 
@@ -320,24 +377,11 @@ function App() {
     setPanelMode(mode);
   };
 
-  useEffect(() => {
-    if (programmedQueryRef.current) {
-      programmedQueryRef.current = false;
-      return;
-    }
-    if (query.trim()) {
-      setSelected(null);
-      setPanelMode("search");
-    } else if (panelMode === "search") {
-      setPanelMode(null);
-    }
-  }, [query]);
-
   return (
     <main className="app">
-      <Header query={query} setQuery={setQuery} openTopic={openTopic} openArchive={openArchive} level={level} setLevelOpen={setLevelOpen} runFullTextSearch={runFullTextSearch} fullTextLoading={fullTextLoading} />
+      <Header query={query} setQuery={setQuery} onThemeClick={handleThemeClick} openArchive={openArchive} level={level} setLevelOpen={setLevelOpen} runFullTextSearch={runFullTextSearch} fullTextLoading={fullTextLoading} />
       <section className="workspace">
-        <GraphCanvas posts={posts} theses={theses} selected={selected} panelOpen={Boolean(panelMode)} onTopic={openTopic} onThesis={openThesis} onDismiss={() => setPanelMode(null)} />
+        <GraphCanvas nodes={dynamicNodes} selected={selected} focusNode={focusNode} panelOpen={Boolean(panelMode)} onThesis={openThesis} onDismiss={() => setPanelMode(null)} />
         {panelMode && (
           <ListPanel
             mode={panelMode}
@@ -346,7 +390,6 @@ function App() {
             posts={filtered}
             defaultCount={defaultResults.length}
             bodyCount={bodyResults.length}
-            theses={theses}
             later={later}
             scraps={scraps}
             read={read}
@@ -366,7 +409,7 @@ function App() {
   );
 }
 
-function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen, runFullTextSearch, fullTextLoading }) {
+function Header({ query, setQuery, onThemeClick, openArchive, level, setLevelOpen, runFullTextSearch, fullTextLoading }) {
   return (
     <header className="header">
       <div className="topbar">
@@ -386,19 +429,24 @@ function Header({ query, setQuery, openTopic, openArchive, level, setLevelOpen, 
         <button className="blog">블로그</button>
       </div>
       <div className="quickbar">
-        <button className="primaryChip"><Eye size={16} />둘러보기</button>
-        <button className="ghostChip"><BookOpen size={17} />제대로 읽기</button>
-        {TOPICS.map((topic) => (
-          <button key={topic.id} className="topicChip" onClick={() => openTopic(topic)}>{topic.name}</button>
+        {MAIN_THEMES.map((theme) => (
+          <button key={theme} className="topicChip" onClick={() => onThemeClick(theme)}>{theme}</button>
         ))}
       </div>
     </header>
   );
 }
 
-function GraphCanvas({ posts, theses, selected, panelOpen, onTopic, onThesis, onDismiss }) {
+function GraphCanvas({ nodes, selected, focusNode, panelOpen, onThesis, onDismiss }) {
   const canvasRef = useRef(null);
-  const graphRef = useRef({ scale: 1, offsetX: 0, offsetY: 0, locked: false, nodes: [] });
+  const graphRef = useRef({ scale: 1, offsetX: 0, offsetY: 0, locked: false });
+
+  useEffect(() => {
+    if (focusNode) {
+      graphRef.current.offsetX = -focusNode.x * graphRef.current.scale;
+      graphRef.current.offsetY = -focusNode.y * graphRef.current.scale;
+    }
+  }, [focusNode, nodes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -415,60 +463,48 @@ function GraphCanvas({ posts, theses, selected, panelOpen, onTopic, onThesis, on
     resize();
     window.addEventListener("resize", resize);
 
-    const topicNodes = TOPICS.map((topic, index) => {
-      const count = getTopicCount(posts, topic.name);
-      return { ...topic, count, kind: "topic", r: 15 + Math.min(10, count / 12), a: (Math.PI * 2 * index) / TOPICS.length, d: 98 + (index % 3) * 25 };
-    });
-
-    const thesisNodes = theses.slice(0, 24).map((name, index) => {
-      const topic = getTopicMeta(name);
-      return { id: `thesis-${index}`, name, count: posts.filter((post) => post.theses === name).length, kind: "thesis", color: topic.color, r: 6 + (index % 3), a: (Math.PI * 2 * index) / Math.max(1, theses.length) + 0.3, d: 165 + (index % 5) * 15 };
-    });
-
-    const smallNodes = posts.slice(0, 52).map((post, index) => {
-      const topic = getTopicMeta(post.theses);
-      return { id: `small-${post.postId}`, name: "", kind: "small", color: topic.color, r: 2 + (index % 4), a: (Math.PI * 2 * index) / 52, d: 231 + (index % 8) * 13 };
-    });
-
-    const nodes = [...topicNodes, ...thesisNodes, ...smallNodes];
-    graph.nodes = nodes;
-
     let frame = 0;
     const draw = () => {
       frame += graph.locked ? 0 : 0.003;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
       const cx = w * (panelOpen ? 0.42 : 0.55) + graph.offsetX;
-      const cy = h * 0.52 + graph.offsetY;
+      const cy = h * 0.5 + graph.offsetY;
+
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = "#061109";
       ctx.fillRect(0, 0, w, h);
       drawBamboo(ctx, w, h);
+
       ctx.save();
       ctx.translate(cx, cy);
       ctx.scale(graph.scale, graph.scale);
+
+      // Update node positions
       nodes.forEach((node) => {
-        node.x = Math.cos(node.a + frame * (node.kind === "small" ? 0.8 : 0.35)) * node.d;
-        node.y = Math.sin(node.a + frame * (node.kind === "small" ? 0.8 : 0.35)) * node.d * 0.72;
+        node.x = Math.cos(node.a + frame * 0.35) * node.d;
+        node.y = Math.sin(node.a + frame * 0.35) * node.d * 0.72;
       });
-      ctx.globalAlpha = 0.28;
-      for (let i = 0; i < nodes.length; i += 1) {
-        for (let j = i + 1; j < nodes.length; j += 9) {
-          const a = nodes[i];
-          const b = nodes[j];
-          if (Math.hypot(a.x - b.x, a.y - b.y) < 133) {
+
+      // Draw connections
+      ctx.globalAlpha = 0.2;
+      ctx.lineWidth = 0.5;
+      nodes.forEach((a) => {
+        nodes.forEach((b) => {
+          if (a.id !== b.id && Math.hypot(a.x - b.x, a.y - b.y) < 150) {
             ctx.strokeStyle = a.color;
-            ctx.lineWidth = 0.7;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
             ctx.stroke();
           }
-        }
-      }
+        });
+      });
+
       ctx.globalAlpha = 1;
       nodes.forEach((node) => drawNode(ctx, node, selected));
       ctx.restore();
+
       animationId = requestAnimationFrame(draw);
     };
 
@@ -478,22 +514,22 @@ function GraphCanvas({ posts, theses, selected, panelOpen, onTopic, onThesis, on
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationId);
     };
-  }, [posts, theses, selected, panelOpen]);
+  }, [nodes, selected, panelOpen]);
 
   const hitTest = (event) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const graph = graphRef.current;
     const cx = canvas.clientWidth * (panelOpen ? 0.42 : 0.55) + graph.offsetX;
-    const cy = canvas.clientHeight * 0.52 + graph.offsetY;
+    const cy = canvas.clientHeight * 0.5 + graph.offsetY;
     const x = (event.clientX - rect.left - cx) / graph.scale;
     const y = (event.clientY - rect.top - cy) / graph.scale;
-    const hit = [...graph.nodes].reverse().find((node) => Math.hypot(node.x - x, node.y - y) <= node.r + 5 && node.kind !== "small");
+    const hit = [...nodes].reverse().find((node) => Math.hypot(node.x - x, node.y - y) <= node.r + 5);
     if (!hit) {
       if (panelOpen) onDismiss();
       return;
     }
-    hit.kind === "topic" ? onTopic(hit) : onThesis(hit.name);
+    onThesis(hit);
   };
 
   const api = {
@@ -547,21 +583,19 @@ function drawBamboo(ctx, w, h) {
 function drawNode(ctx, node, selected) {
   const active = selected?.name === node.name;
   ctx.beginPath();
-  ctx.fillStyle = node.kind === "topic" ? node.color : "#0b2012";
+  ctx.fillStyle = node.kind === "theme" ? "#0b2012" : "#1a351f";
   ctx.strokeStyle = active ? "#f6ffd7" : node.color;
   ctx.lineWidth = active ? 3 : 1.6;
   ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  if (node.kind !== "small") {
-    ctx.fillStyle = node.kind === "topic" ? "#13210d" : "#e9ffd0";
-    ctx.font = node.kind === "topic" ? "bold 6px sans-serif" : "bold 4px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(node.kind === "topic" ? String(node.count) : "◆", node.x, node.y + 3);
-    ctx.fillStyle = "#eefadc";
-    ctx.font = "bold 8px sans-serif";
-    ctx.fillText(node.name, node.x, node.y + node.r + 9);
-  }
+  ctx.fillStyle = "#e9ffd0";
+  ctx.font = "bold 6px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(String(node.count), node.x, node.y + 2);
+  ctx.fillStyle = "#eefadc";
+  ctx.font = "bold 8px sans-serif";
+  ctx.fillText(node.name, node.x, node.y + node.r + 9);
 }
 
 function getPostLink(post) {
@@ -576,7 +610,6 @@ function ListPanel(props) {
     posts,
     defaultCount,
     bodyCount,
-    theses,
     later,
     scraps,
     read,
@@ -613,12 +646,6 @@ function ListPanel(props) {
         <button className={readMode === "read" ? "on" : ""} onClick={() => setReadMode("read")}><BookOpen size={16} />제대로 읽기</button>
       </div>
       <div className="panelScroll">
-        {mode === "search" && (
-          <div className="related">
-            <p>유기적으로 연결된 다른 분야 테제</p>
-            {theses.slice(0, 8).map((thesis) => <button key={thesis}>{thesis}</button>)}
-          </div>
-        )}
         <div className="articleList">
           {posts.map((post) => (
             <article key={`${post.matchType}-${post.postId}`} className={read.has(post.postId) ? "read article" : "article"} onClick={() => openPost(post)}>
@@ -672,18 +699,6 @@ function LevelModal({ posts, level, read, readCount, nextLevel, onClose }) {
         </div>
         <p className="progressText">전체 진행도 <b>{readCount}</b> / {posts.length}편 ({posts.length ? Math.round((readCount / posts.length) * 100) : 0}%) · 다음 레벨까지 {Math.max(0, nextLevel - readCount)}편</p>
         <div className="bar"><span style={{ width: `${Math.min(100, (readCount % 10) * 10)}%` }} /></div>
-        <div className="levelBody">
-          <div className="radar">
-            {TOPICS.map((topic, index) => <span key={topic.id} style={{ transform: `rotate(${index * 45}deg) translateY(-116px) rotate(${-index * 45}deg)` }}>{topic.name}</span>)}
-          </div>
-          <div className="topicProgress">
-            {TOPICS.map((topic) => {
-              const topicPosts = posts.filter((post) => post.theses.includes(topic.name));
-              const topicRead = topicPosts.filter((post) => read.has(post.postId)).length;
-              return <label key={topic.id}>{topic.name}<b>{topicRead}/{topicPosts.length}</b><i><span style={{ width: `${topicPosts.length ? (topicRead / topicPosts.length) * 100 : 0}%` }} /></i></label>;
-            })}
-          </div>
-        </div>
       </section>
     </div>
   );
